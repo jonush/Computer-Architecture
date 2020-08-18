@@ -1,3 +1,10 @@
+"""
+CPU Emulator
+---------------------------------------------
+"""
+
+import sys
+
 # The index into the memory array, AKA the location, address, pointer
 
 # 1 - PRINT_HELLO
@@ -16,11 +23,39 @@ memory = [
     2 # HALT
 ]
 
-registers = [0] * 8
+registers = [0] * 8     # registers[4] = 37
 
-"""
-registers[4] = 37
-"""
+try:
+    with open(sys.argv[1]) as f:
+        for line in f:
+            line = line.strip()
+            temp = line.split()
+
+            if len(temp) == 0:
+                continue
+            if temp[0][0] == "#":
+                continue
+
+            try:
+                memory[address] = int(temp[0])
+
+            except ValueError:
+                print(f"Invalid number: {temp[0]}")
+                sys.exit(1)
+
+            address += 1
+
+except FileNotFoundError:
+    print(f"Couldn't open {sys.argv[1]}")
+    sys.exit(2) # any non-zero value means failure
+
+if len(sys.argv) != 2:
+    print("usage: notes.py progname")
+    sys.exit(1)
+
+if address == 0:
+    print("Program was empty!")
+    sys.exit(3)
 
 def computer():
 
@@ -48,6 +83,10 @@ def computer():
             print(registers[reg_num])
             pc += 2
 
+        number_of_arguments = ir >> 6
+        size_of_this_instruction = number_of_arguments + 1
+        pc += size_of_this_instruction
+        
 # computer()
 
 """
