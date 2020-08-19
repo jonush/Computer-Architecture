@@ -2,12 +2,13 @@
 
 import sys
 
-
 # Machine Code Values shown in binary
 LDI = 0b10000010
 MUL = 0b10100010
 PRN = 0b01000111
 HLT = 0b00000001
+PUSH = 0b01000101
+POP = 0b01000110
 
 class CPU:
     """Main CPU class."""
@@ -16,6 +17,7 @@ class CPU:
         """Construct a new CPU."""
         self.ram = [0] * 256    # memory
         self.reg = [0] * 8      # registers
+        self.reg[7] = 0xf4      # Stack Pointer
         self.pc = 0             # Program Counter
         self.running = False    # Toggle Running State
         self.branchtable = {}   # initialize the branch table
@@ -23,6 +25,8 @@ class CPU:
         self.branchtable[MUL] = self.alu
         self.branchtable[PRN] = self.handle_PRN
         self.branchtable[HLT] = self.handle_HLT
+        self.branchtable[PUSH] = self.handle_PUSH
+        self.branchtable[POP] = self.handle_POP
 
     def ram_read(self, MAR):
         """
@@ -111,6 +115,34 @@ class CPU:
         """Halt: halt the CPU (& exit the emulator)"""
         self.running = False
         self.pc += 1
+
+    def handle_PUSH(self):
+        # decrement the stack pointer
+        self.reg[7] -= 1
+        # get value from next line of instruction
+        operand_a = self.ram_read(self.pc + 1)
+        # the actual value we want to push
+        value = self.reg[operand_a]
+        # get the address at the stack pointer
+        top_stack_address = self.reg[7]
+        # store it on the stack
+        self.ram[top_stack_address] = value
+        # increment the program counter
+        self.pc += 2
+
+    def handle_POP(self):
+        # get the address at stack pointer
+        top_stack_address = self.reg[7]
+        # get value at address of stack pointer
+        value = self.ram[top_stack_address]
+        # get next line instruction to find where to update value
+        operand_a = self.ram_read(self.pc + 1)
+        # update the value
+        self.reg[operand_a] = value
+        # increment the stack pointer
+        self.reg[7] += 1
+        # increment the program counter
+        self.pc += 2
 
     def run(self):
         """Run the CPU."""

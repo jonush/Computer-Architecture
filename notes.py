@@ -25,6 +25,10 @@ memory = [
 
 registers = [0] * 8     # registers[4] = 37
 
+# Stack Pointer
+# in hex, there are only 4 characters to parse (shorter than binary)
+registers[7] = 0xf4 
+
 try:
     with open(sys.argv[1]) as f:
         for line in f:
@@ -82,12 +86,39 @@ def computer():
             reg_num = memory[pc + 1]
             print(registers[reg_num])
             pc += 2
-
+        elif ir == 5: # PUSH
+            # decrement SP
+            registers[7] -= 1
+            # get value from register
+            reg_num = memory[pc + 1]
+            # the actual value we want to push
+            value = registers[reg_num]
+            # store it on the stack
+            top_of_stack_addr = registers[7]
+            memory[top_of_stack_addr] = value
+            pc += 2
+        else:
+            print(f"Invalid instruction {ir} at address {pc}")
+        
         number_of_arguments = ir >> 6
         size_of_this_instruction = number_of_arguments + 1
         pc += size_of_this_instruction
         
 # computer()
+
+"""
+CPU Stack
+---------------------------------------------
+1. initialize desired register as the stack pointer (SP)
+
+For `PUSH`
+1. decrement the SP
+2, copy the value from the register into the RAM at the SP
+
+FOR `POP`
+1. copy the value from the SP to the desired register
+2. increment the SP
+"""
 
 """
 WHITEBOARD CHALLENGE
