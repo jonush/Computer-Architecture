@@ -4,29 +4,37 @@ import sys
 
 # Machine Code Values shown in binary
 LDI = 0b10000010
+ADD = 0b10100000
 MUL = 0b10100010
 PRN = 0b01000111
 HLT = 0b00000001
 PUSH = 0b01000101
 POP = 0b01000110
+CALL = 0b01010000
+RET = 0b00010001
 
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
         """Construct a new CPU."""
-        self.ram = [0] * 256    # memory
-        self.reg = [0] * 8      # registers
-        self.reg[7] = 0xf4      # Stack Pointer
-        self.pc = 0             # Program Counter
-        self.running = False    # Toggle Running State
-        self.branchtable = {}   # initialize the branch table
-        self.branchtable[LDI] = self.handle_LDI
-        self.branchtable[MUL] = self.alu
-        self.branchtable[PRN] = self.handle_PRN
-        self.branchtable[HLT] = self.handle_HLT
-        self.branchtable[PUSH] = self.handle_PUSH
-        self.branchtable[POP] = self.handle_POP
+        self.ram = [0] * 256        # memory
+        self.reg = [0] * 8          # registers
+        self.SP = 7                 # set Stack Pointer to index [7]
+        self.reg[self.SP] = 0xf4    # initialize the Stack Pointer
+        self.pc = 0                 # Program Counter
+        self.running = False        # Toggle Running State
+        self.branchtable = {        # initialize the branch table
+            LDI: self.handle_LDI,
+            ADD: self.handle_ADD,
+            MUL: self.handle_MUL,
+            PRN: self.handle_PRN,
+            HLT: self.handle_HLT,
+            PUSH: self.handle_PUSH,
+            POP: self.handle_POP,
+            CALL: self.handle_CALL,
+            RET: self.handle_RET
+        }
 
     def ram_read(self, MAR):
         """
@@ -74,7 +82,6 @@ class CPU:
             self.reg[reg_a] += self.reg[reg_b]
         elif op == "MUL":
             self.reg[reg_a] *= self.reg[reg_b]
-            self.pc += 3
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -98,68 +105,72 @@ class CPU:
 
         print()
 
-    def handle_LDI(self):
-        """Load Register Immediate: set the value of a register to an integer"""
-        operand_a = self.ram_read(self.pc + 1)
-        operand_b = self.ram_read(self.pc + 2)
-        self.reg[operand_a] = operand_b
-        self.pc += 3
+    def handle_CALL(self, operand_a):
+        # decrement the stack pointer
+        self.reg[self.SP] -= 1
+        # save value of program counter + 2 to ram address at register[SP] 
+        self.ram_write(self.reg[self.SP], self.pc + 2)
+        # call the subroutine
+        self.pc = self.reg[operand_a]
 
-    def handle_PRN(self):
+    def handle_RET(self):
+        # set program counter to the return address
+        self.pc = self.ram_read(self.reg[self.SP])
+        # increment the stack pointer
+        self.reg[self.SP] += 1
+
+    def handle_LDI(self, operand_a, operand_b):
+        """Load Register Immediate: set the value of a register to an integer"""
+        self.reg[operand_a] = operand_b
+        #self.pc += 3
+
+    def handle_PRN(self, address):
         """Print Register: print the numeric value stored in a given register"""
-        address = self.ram_read(self.pc + 1)
         print(self.reg[address])
-        self.pc += 2
+        #self.pc += 2
+
+    def handle_MUL(self, operand_a, operand_b):
+        # provide parameters for multiplication operation
+        self.alu("MUL", operand_a, operand_b)
+
+    def handle_ADD(self, operand_a, operand_b):
+        # provide parameters for addition operation
+        self.alu("ADD", operand_a, operand_b)
     
     def handle_HLT(self):
         """Halt: halt the CPU (& exit the emulator)"""
         self.running = False
-        self.pc += 1
 
-    def handle_PUSH(self):
+    def handle_PUSH(self, operand_a):
         # decrement the stack pointer
-        self.reg[7] -= 1
-        # get value from next line of instruction
-        operand_a = self.ram_read(self.pc + 1)
-        # the actual value we want to push
-        value = self.reg[operand_a]
-        # get the address at the stack pointer
-        top_stack_address = self.reg[7]
-        # store it on the stack
-        self.ram[top_stack_address] = value
-        # increment the program counter
-        self.pc += 2
+        self.reg[self.SP] -= 1
+        # get address at stack pointer and the actual value
+        self.ram_write(self.reg[self.SP], self.reg[operand_a])
 
-    def handle_POP(self):
-        # get the address at stack pointer
-        top_stack_address = self.reg[7]
-        # get value at address of stack pointer
-        value = self.ram[top_stack_address]
-        # get next line instruction to find where to update value
-        operand_a = self.ram_read(self.pc + 1)
-        # update the value
-        self.reg[operand_a] = value
+    def handle_POP(self, operand_a):
+        # get address at stack pointer and value at address
+        self.reg[operand_a] = self.ram_read(self.reg[self.SP])
         # increment the stack pointer
-        self.reg[7] += 1
-        # increment the program counter
-        self.pc += 2
+        self.reg[self.SP] += 1
 
     def run(self):
         """Run the CPU."""
         self.running = True
 
         while self.running:
-            # initialize Instruction Register with value
-            # of RAM array at index of [Program Count] (initially 0)
-            ir = self.ram[self.pc]
-
-            # check if program requires multiplication
-            if ir == MUL:
-                operand_a = self.ram_read(self.pc + 1)
-                operand_b = self.ram_read(self.pc + 2)
-                # provide parameters for multiplication operation
-                self.branchtable[ir]("MUL", operand_a, operand_b)
-            # otherwise, locate program in the branch table
-            else:
-                # execute the program
+            # initialize Instruction Register with value of RAM at index[pc]
+            ir = self.ram_read(self.pc)
+            # identify the number of operands for an instruction
+            operands = (ir & 0b11000000) >> 6
+            
+            if operands == 0:
                 self.branchtable[ir]()
+            elif operands == 1:
+                self.branchtable[ir](self.ram_read(self.pc + 1))
+            elif operands == 2:
+                self.branchtable[ir](self.ram_read(self.pc + 1), self.ram_read(self.pc + 2))
+
+            # if the instruction does NOT set self.pc
+            if ir & 0b00010000 == 0:
+                # set self.pc to number of operands + 1
+                self.pc += operands + 1
